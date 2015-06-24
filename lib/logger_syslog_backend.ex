@@ -46,11 +46,11 @@ defmodule LoggerSyslogBackend do
     host     = Keyword.get(syslog, :host, '127.0.0.1') |> IO.iodata_to_binary |> String.to_char_list
     port     = Keyword.get(syslog, :port, 514)
     facility = Keyword.get(syslog, :facility, :local2) |> facility_code
-    app      = Keyword.get(syslog, :app, :elixir)
+    app_name = Keyword.get(syslog, :app_name, :elixir)
     socket   = Keyword.get(options, :socket)
     {:ok, hostname} = :inet.gethostname()
     %{format: format, metadata: metadata, level: level, socket: socket,
-      host: host, port: port, facility: facility, app: app,
+      host: host, port: port, facility: facility, app_name: app_name,
       hostname: hostname}
   end
 
@@ -61,11 +61,10 @@ defmodule LoggerSyslogBackend do
   defp log_event(level, msg, ts, md, state) do
     ansidata = format_event(level, msg, ts, md, state)
 
-    %{facility: facility, app: app, hostname: hostname, host: host, port: port, socket: socket} = state
+    %{facility: facility, app_name: app_name, hostname: hostname, host: host, port: port, socket: socket} = state
 
-    pre = :io_lib.format('<~B>~B ~s ~s ~s ~p ~s - ', [facility ||| severity(level),
-                                                      @syslog_version, iso8601_timestamp(), hostname, app, self,
-                                                      '-'])
+    pre = :io_lib.format('<~B>~B ~s ~s ~s ~p - - ', [facility ||| severity(level),
+                                                     @syslog_version, iso8601_timestamp(), hostname, app_name, self])
 
     :gen_udp.send(socket, host, port, [pre, ansidata, ?\n])
   end
@@ -78,7 +77,6 @@ defmodule LoggerSyslogBackend do
   defp severity(:info),  do: 6
   defp severity(:warn),  do: 4
   defp severity(:error), do: 3
-  defp severity(_),      do: 7
 
   defp facility_code(:local0), do: (16 <<< 3)
   defp facility_code(:local1), do: (17 <<< 3)
