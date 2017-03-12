@@ -4,19 +4,14 @@ defmodule LoggerSyslogBackend do
   use GenEvent
   use Bitwise
 
-  @syslog_version 1
+  @default_format "[$level] $levelpad$metadata $message"
 
-  def init(_) do
-    case :gen_udp.open(0) do
-      {:ok, socket} ->
-        {:ok, configure([socket: socket])}
-      _ ->
-        {:error, :ignore}
-    end
+  def init({__MODULE__, name}) do
+    {:ok, configure(name, [])}
   end
 
-  def handle_call({:configure, options}, _state) do
-    {:ok, :ok, configure(options)}
+  def handle_call({:configure, opts}, %{name: name} = state) do
+    {:ok, :ok, configure(name, opts, state)}
   end
 
   def handle_event({_level, gl, _event}, state) when node(gl) != node() do
@@ -30,47 +25,55 @@ defmodule LoggerSyslogBackend do
     {:ok, state}
   end
 
-  ## Helpers
-
-  defp configure(options) do
-    env = Application.get_env(:logger, :syslog, [])
-    syslog = configure_merge(env, options)
-    Application.put_env(:logger, :syslog, syslog)
-
-    format = syslog
-    |> Keyword.get(:format)
-    |> Logger.Formatter.compile
-
-    level    = Keyword.get(syslog, :level)
-    metadata = Keyword.get(syslog, :metadata, [])
-    host     = Keyword.get(syslog, :host, '127.0.0.1') |> IO.iodata_to_binary |> String.to_char_list
-    port     = Keyword.get(syslog, :port, 514)
-    facility = Keyword.get(syslog, :facility, :local2) |> facility_code
-    app      = Keyword.get(syslog, :app, :elixir)
-    socket   = Keyword.get(options, :socket)
-    {:ok, hostname} = :inet.gethostname()
-    %{format: format, metadata: metadata, level: level, socket: socket,
-      host: host, port: port, facility: facility, app: app,
-      hostname: hostname}
+  def handle_event(:flush, state) do
+    {:ok, state}
   end
 
-  defp configure_merge(env, options) do
-    Keyword.merge(env, options)
+  ## Helpers
+
+  defp configure(name, opts) do
+    state = %{name: nil, format: nil, level: nil, metadata: nil, socket: nil, facility: nil, app_id: nil, path: nil}
+    configure(name, opts, state)
+  end
+
+  defp configure(name, opts, state) do
+    env = Application.get_env(:logger, name, [])
+    opts = Keyword.merge(env, opts)
+    Application.put_env(:logger, name, opts)
+
+    format   = Keyword.get(opts, :format, @default_format) |> Logger.Formatter.compile()
+    level    = Keyword.get(opts, :level)
+    metadata = Keyword.get(opts, :metadata, [])
+    facility = Keyword.get(opts, :facility, :local2) |> facility_code
+    app_id   = Keyword.get(opts, :app_id, :elixir)
+    path     = Keyword.get(opts, :path, "/dev/log") |> IO.iodata_to_binary() |> String.to_charlist()
+    %{state | format: format, metadata: metadata, level: level, facility: facility, path: path, app_id: app_id}
+  end
+
+  defp log_event(_level, _msg, _ts, _md, %{path: nil} = state) do
+    {:ok, state}
+  end
+
+  defp log_event(level, msg, ts, md, %{path: path, socket: nil} = state) when is_list(path) do
+    case open_socket(path) do
+      {:ok, socket} -> log_event(level, msg, ts, md, %{state | socket: socket})
+      _other        -> {:ok, state}
+    end
   end
 
   defp log_event(level, msg, ts, md, state) do
     ansidata = format_event(level, msg, ts, md, state)
+    %{facility: facility, app_id: app_id, socket: socket, path: path} = state
+    pre = :io_lib.format('<~B>~s ~s ~p: ', [facility ||| severity(level), timestamp(ts), app_id, self()])
+    :gen_udp.send(socket, {:local, path}, 0, [pre, ansidata, ?\n])
+  end
 
-    %{facility: facility, app: app, hostname: hostname, host: host, port: port, socket: socket} = state
-
-    pre = :io_lib.format('<~B>~B ~s ~s ~s ~p - - ', [facility ||| severity(level),
-                                                     @syslog_version, iso8601_timestamp(), hostname, app, self])
-
-    :gen_udp.send(socket, host, port, [pre, ansidata, ?\n])
+  defp open_socket(_path) do
+    :gen_udp.open(0, [:local])
   end
 
   defp format_event(level, msg, ts, md, %{format: format, metadata: metadata}) do
-    Logger.Formatter.format(format, level, msg, ts, Dict.take(md, metadata))
+    Logger.Formatter.format(format, level, msg, ts, Keyword.take(md, metadata))
   end
 
   defp severity(:debug), do: 7
@@ -87,10 +90,8 @@ defmodule LoggerSyslogBackend do
   defp facility_code(:local6), do: (22 <<< 3)
   defp facility_code(:local7), do: (23 <<< 3)
 
-  defp iso8601_timestamp() do
-    {_, _, micro} = now = :os.timestamp()
-    {{year, month, day},{hour, minute, second}} = :calendar.now_to_datetime(now)
-    format = '~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0B.~6.10.0BZ'
-    :io_lib.format(format, [year, month, day, hour, minute, second, micro])
+  def timestamp({{_year,month,date},{hour,minute,second,_}}) do
+    mstr = elem({"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}, month - 1)
+    :io_lib.format("~s ~2..0B ~2..0B:~2..0B:~2..0B", [mstr, date, hour, minute, second])
   end
 end

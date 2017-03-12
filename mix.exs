@@ -4,19 +4,19 @@ defmodule LoggerSyslogBackend.Mixfile do
   def project do
     [app: :logger_syslog_backend,
      version: "0.0.1",
-     elixir: "~> 1.0",
+     elixir: "~> 1.4",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
-     description: description,
-     package: package,
-     deps: deps]
+     description: description(),
+     package: package(),
+     deps: deps()]
   end
 
   # Configuration for the OTP application
   #
   # Type `mix help compile.app` for more information
   def application do
-    [applications: [:logger, :inets]]
+    [extra_applications: [:logger, :inets]]
   end
 
   defp description do
