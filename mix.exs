@@ -4,7 +4,7 @@ defmodule LoggerSyslogBackend.Mixfile do
   def project do
     [app: :logger_syslog_backend,
      version: "0.0.1",
-     elixir: "~> 1.4",
+     elixir: "~> 1.5",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
      description: description(),
@@ -20,11 +20,12 @@ defmodule LoggerSyslogBackend.Mixfile do
   end
 
   defp description do
-    "Logger backend that writes to a syslog server over UDP."
+    "Logger backend that writes to the local syslog Unix Socket"
   end
 
   defp package do
-    [contributors: ["Paulo Almeida"],
+    [files: ["lib", "mix.exs", "README.md", "LICENSE"],
+     maintainers: ["Paulo Almeida"],
      licenses: ["MIT"],
      links: %{"GitHub" => "https://github.com/pma/logger_syslog_backend"}]
   end
@@ -39,6 +40,6 @@ defmodule LoggerSyslogBackend.Mixfile do
   #
   # Type `mix help deps` for more examples and options
   defp deps do
-    []
+    [{:ex_doc, "~> 0.17", only: :dev},]
   end
 end

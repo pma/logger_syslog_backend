@@ -3,7 +3,7 @@ Logger Syslog Backend
 
 Elixir Logger backend for local syslog (and rfc3164).
 
-Requires Erlang 19 since it writes directly to the local syslog Unix Socket (defaults to /dev/log).
+Requires Erlang 19 since it writes directly to the local syslog Unix Socket (/dev/log).
 
 ## Installation
 
@@ -11,7 +11,7 @@ Requires Erlang 19 since it writes directly to the local syslog Unix Socket (def
 
     ```elixir
     def deps do
-      [{:logger_syslog_backend, github: "pma/logger_syslog_backend"}]
+      [{:logger_syslog_backend, "~> 0.0.1"}]
     end
     ```
 
@@ -22,6 +22,6 @@ Requires Erlang 19 since it writes directly to the local syslog Unix Socket (def
       backends: [:console, {LoggerSyslogBackend, :syslog}]
 
     config :logger, :syslog,
-      app_id: :my_app,
-      path: "/dev/log"
+      app_id: :my_app,  # defaults to the application of the caller module
+      path: "/dev/log"  # defaults to "/dev/log" in Linux and "/var/run/syslog" in macOS
     ```
