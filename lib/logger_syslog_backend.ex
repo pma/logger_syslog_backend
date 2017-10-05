@@ -1,7 +1,7 @@
 defmodule LoggerSyslogBackend do
   @moduledoc false
 
-  use GenEvent
+  @behaviour :gen_event
   use Bitwise
 
   @default_format "[$level] $levelpad$metadata $message"
@@ -29,6 +29,10 @@ defmodule LoggerSyslogBackend do
     {:ok, state}
   end
 
+  def handle_info({:io_reply, _ref, _}, state) do
+    {:ok, state}
+  end
+
   ## Helpers
 
   defp configure(name, opts) do
@@ -41,13 +45,20 @@ defmodule LoggerSyslogBackend do
     opts = Keyword.merge(env, opts)
     Application.put_env(:logger, name, opts)
 
-    format   = Keyword.get(opts, :format, @default_format) |> Logger.Formatter.compile()
+    format   = Keyword.get(opts, :format, @default_format) |> Logger.Formatter.compile
     level    = Keyword.get(opts, :level)
     metadata = Keyword.get(opts, :metadata, [])
     facility = Keyword.get(opts, :facility, :local2) |> facility_code
-    app_id   = Keyword.get(opts, :app_id, :elixir)
-    path     = Keyword.get(opts, :path, "/dev/log") |> IO.iodata_to_binary() |> String.to_charlist()
+    app_id   = Keyword.get(opts, :app_id)
+    path     = Keyword.get_lazy(opts, :path, fn -> default_path() end) |> IO.iodata_to_binary |> String.to_charlist
     %{state | format: format, metadata: metadata, level: level, facility: facility, path: path, app_id: app_id}
+  end
+
+  defp default_path do
+    case :os.type do
+      {:unix, :darwin} -> "/var/run/syslog"
+      {:unix, _}       -> "/dev/log"
+    end
   end
 
   defp log_event(_level, _msg, _ts, _md, %{path: nil} = state) do
@@ -64,6 +75,7 @@ defmodule LoggerSyslogBackend do
   defp log_event(level, msg, ts, md, state) do
     ansidata = format_event(level, msg, ts, md, state)
     %{facility: facility, app_id: app_id, socket: socket, path: path} = state
+    app_id = app_id || Application.get_application(md[:module] || :elixir)
     pre = :io_lib.format('<~B>~s ~s ~p: ', [facility ||| severity(level), timestamp(ts), app_id, self()])
     :gen_udp.send(socket, {:local, path}, 0, [pre, ansidata, ?\n])
   end
