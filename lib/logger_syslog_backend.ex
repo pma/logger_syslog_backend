@@ -21,8 +21,9 @@ defmodule LoggerSyslogBackend do
   def handle_event({level, _gl, {Logger, msg, ts, md}}, %{level: min_level} = state) do
     if is_nil(min_level) or Logger.compare_levels(level, min_level) != :lt do
       log_event(level, msg, ts, md, state)
+    else
+      {:ok, state}
     end
-    {:ok, state}
   end
 
   def handle_event(:flush, state) do
@@ -33,10 +34,24 @@ defmodule LoggerSyslogBackend do
     {:ok, state}
   end
 
+  def handle_info({:EXIT, socket, :normal}, state) when is_port(socket) do
+    {:ok, %{state | socket: nil}}
+  end
+
   ## Helpers
 
   defp configure(name, opts) do
-    state = %{name: nil, format: nil, level: nil, metadata: nil, socket: nil, facility: nil, app_id: nil, path: nil}
+    state = %{
+      name: nil,
+      format: nil,
+      level: nil,
+      metadata: nil,
+      socket: nil,
+      facility: nil,
+      app_id: nil,
+      path: nil
+    }
+
     configure(name, opts, state)
   end
 
@@ -45,19 +60,31 @@ defmodule LoggerSyslogBackend do
     opts = Keyword.merge(env, opts)
     Application.put_env(:logger, name, opts)
 
-    format   = Keyword.get(opts, :format, @default_format) |> Logger.Formatter.compile
-    level    = Keyword.get(opts, :level)
+    format = Keyword.get(opts, :format, @default_format) |> Logger.Formatter.compile()
+    level = Keyword.get(opts, :level)
     metadata = Keyword.get(opts, :metadata, [])
     facility = Keyword.get(opts, :facility, :local2) |> facility_code
-    app_id   = Keyword.get(opts, :app_id)
-    path     = Keyword.get_lazy(opts, :path, fn -> default_path() end) |> IO.iodata_to_binary |> String.to_charlist
-    %{state | format: format, metadata: metadata, level: level, facility: facility, path: path, app_id: app_id}
+    app_id = Keyword.get(opts, :app_id)
+
+    path =
+      Keyword.get_lazy(opts, :path, fn -> default_path() end) |> IO.iodata_to_binary()
+      |> String.to_charlist()
+
+    %{
+      state
+      | format: format,
+        metadata: metadata,
+        level: level,
+        facility: facility,
+        path: path,
+        app_id: app_id
+    }
   end
 
   defp default_path do
-    case :os.type do
+    case :os.type() do
       {:unix, :darwin} -> "/var/run/syslog"
-      {:unix, _}       -> "/dev/log"
+      {:unix, _} -> "/dev/log"
     end
   end
 
@@ -65,10 +92,13 @@ defmodule LoggerSyslogBackend do
     {:ok, state}
   end
 
-  defp log_event(level, msg, ts, md, %{path: path, socket: nil} = state) when is_list(path) do
+  defp log_event(level, msg, ts, md, %{path: path, socket: nil} = state) do
     case open_socket(path) do
-      {:ok, socket} -> log_event(level, msg, ts, md, %{state | socket: socket})
-      _other        -> {:ok, state}
+      {:ok, socket} ->
+        log_event(level, msg, ts, md, %{state | socket: socket})
+
+      _ ->
+        {:ok, state}
     end
   end
 
@@ -76,8 +106,17 @@ defmodule LoggerSyslogBackend do
     ansidata = format_event(level, msg, ts, md, state)
     %{facility: facility, app_id: app_id, socket: socket, path: path} = state
     app_id = app_id || Application.get_application(md[:module] || :elixir)
-    pre = :io_lib.format('<~B>~s ~s ~p: ', [facility ||| severity(level), timestamp(ts), app_id, self()])
-    :gen_udp.send(socket, {:local, path}, 0, [pre, ansidata, ?\n])
+
+    pre =
+      :io_lib.format('<~B>~s ~s ~p: ', [
+        facility ||| severity(level),
+        timestamp(ts),
+        app_id,
+        self()
+      ])
+
+    :ok = :gen_udp.send(socket, {:local, path}, 0, [pre, ansidata, ?\n])
+    {:ok, state}
   end
 
   defp open_socket(_path) do
@@ -89,21 +128,26 @@ defmodule LoggerSyslogBackend do
   end
 
   defp severity(:debug), do: 7
-  defp severity(:info),  do: 6
-  defp severity(:warn),  do: 4
+  defp severity(:info), do: 6
+  defp severity(:warn), do: 4
   defp severity(:error), do: 3
 
-  defp facility_code(:local0), do: (16 <<< 3)
-  defp facility_code(:local1), do: (17 <<< 3)
-  defp facility_code(:local2), do: (18 <<< 3)
-  defp facility_code(:local3), do: (19 <<< 3)
-  defp facility_code(:local4), do: (20 <<< 3)
-  defp facility_code(:local5), do: (21 <<< 3)
-  defp facility_code(:local6), do: (22 <<< 3)
-  defp facility_code(:local7), do: (23 <<< 3)
+  defp facility_code(:local0), do: 16 <<< 3
+  defp facility_code(:local1), do: 17 <<< 3
+  defp facility_code(:local2), do: 18 <<< 3
+  defp facility_code(:local3), do: 19 <<< 3
+  defp facility_code(:local4), do: 20 <<< 3
+  defp facility_code(:local5), do: 21 <<< 3
+  defp facility_code(:local6), do: 22 <<< 3
+  defp facility_code(:local7), do: 23 <<< 3
 
-  def timestamp({{_year,month,date},{hour,minute,second,_}}) do
-    mstr = elem({"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}, month - 1)
+  def timestamp({{_year, month, date}, {hour, minute, second, _}}) do
+    mstr =
+      elem(
+        {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"},
+        month - 1
+      )
+
     :io_lib.format("~s ~2..0B ~2..0B:~2..0B:~2..0B", [mstr, date, hour, minute, second])
   end
 end
