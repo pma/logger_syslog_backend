@@ -84,6 +84,7 @@ defmodule LoggerSyslogBackend do
   defp default_path do
     case :os.type() do
       {:unix, :darwin} -> "/var/run/syslog"
+      {:unix, :freebsd} -> "/var/run/log"
       {:unix, _} -> "/dev/log"
     end
   end
