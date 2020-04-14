@@ -11,7 +11,7 @@ Requires Erlang 19 since it writes directly to the local syslog Unix Socket (/de
 
     ```elixir
     def deps do
-      [{:logger_syslog_backend, "~> 0.0.1"}]
+      [{:logger_syslog_backend, "~> 1.0"}]
     end
     ```
 
