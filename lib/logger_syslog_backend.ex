@@ -49,6 +49,7 @@ defmodule LoggerSyslogBackend do
       socket: nil,
       facility: nil,
       app_id: nil,
+      buffer: nil,
       path: nil
     }
 
@@ -65,6 +66,7 @@ defmodule LoggerSyslogBackend do
     metadata = Keyword.get(opts, :metadata, [])
     facility = Keyword.get(opts, :facility, :local2) |> facility_code
     app_id = Keyword.get(opts, :app_id)
+    buffer = Keyword.get(opts, :buffer)
 
     path =
       Keyword.get_lazy(opts, :path, fn -> default_path() end) |> IO.iodata_to_binary()
@@ -77,6 +79,7 @@ defmodule LoggerSyslogBackend do
         level: level,
         facility: facility,
         path: path,
+        buffer: buffer,
         app_id: app_id
     }
   end
@@ -93,8 +96,8 @@ defmodule LoggerSyslogBackend do
     {:ok, state}
   end
 
-  defp log_event(level, msg, ts, md, %{path: path, socket: nil} = state) do
-    case open_socket(path) do
+  defp log_event(level, msg, ts, md, %{path: path, socket: nil, buffer: buffer} = state) do
+    case open_socket(path, buffer) do
       {:ok, socket} ->
         log_event(level, msg, ts, md, %{state | socket: socket})
 
@@ -120,8 +123,12 @@ defmodule LoggerSyslogBackend do
     {:ok, state}
   end
 
-  defp open_socket(_path) do
+  defp open_socket(_path, nil) do
     :gen_udp.open(0, [:local])
+  end
+
+  defp open_socket(_path, buffer) do
+    :gen_udp.open(0, [:local, sndbuf: buffer])
   end
 
   defp format_event(level, msg, ts, md, %{format: format, metadata: metadata}) do
