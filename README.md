@@ -23,5 +23,10 @@ Requires Erlang 19 since it writes directly to the local syslog Unix Socket (/de
 
     config :logger, :syslog,
       app_id: :my_app,  # defaults to the application of the caller module
-      path: "/dev/log"  # defaults to "/dev/log" in Linux and "/var/run/syslog" in macOS
+      buffer: 10000,    # allocate a larger sending buffer. This should be
+                        # bigger than Logger's truncate with default 8192
+      path: "/dev/log"  # defaults to "/dev/log" in Linux,
+                        # "/var/run/syslog" in macOS
+                        # "/var/run/log" in FreeBSD
+
     ```
