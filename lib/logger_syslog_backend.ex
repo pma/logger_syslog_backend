@@ -38,6 +38,10 @@ defmodule LoggerSyslogBackend do
     {:ok, %{state | socket: nil}}
   end
 
+  def handle_info(_, state) do
+    {:ok, state}
+  end
+
   ## Helpers
 
   defp configure(name, opts) do
