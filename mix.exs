@@ -4,8 +4,8 @@ defmodule LoggerSyslogBackend.Mixfile do
   def project do
     [
       app: :logger_syslog_backend,
-      version: "1.0.2",
-      elixir: "~> 1.5",
+      version: "1.0.3",
+      elixir: "~> 1.14",
       build_embedded: Mix.env() == :prod,
       start_permanent: Mix.env() == :prod,
       description: description(),
@@ -44,6 +44,6 @@ defmodule LoggerSyslogBackend.Mixfile do
   #
   # Type `mix help deps` for more examples and options
   defp deps do
-    [{:ex_doc, "~> 0.17", only: :dev}]
+    [{:ex_doc, "~> 0.32", only: :dev}]
   end
 end

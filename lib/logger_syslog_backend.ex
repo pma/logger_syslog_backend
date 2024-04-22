@@ -2,9 +2,9 @@ defmodule LoggerSyslogBackend do
   @moduledoc false
 
   @behaviour :gen_event
-  use Bitwise
+  import Bitwise
 
-  @default_format "[$level] $levelpad$metadata $message"
+  @default_format "[$level] $metadata $message"
 
   def init({__MODULE__, name}) do
     {:ok, configure(name, [])}
