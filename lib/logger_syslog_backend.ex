@@ -2,9 +2,9 @@ defmodule LoggerSyslogBackend do
   @moduledoc false
 
   @behaviour :gen_event
-  use Bitwise
+  import Bitwise
 
-  @default_format "[$level] $levelpad$metadata $message"
+  @default_format "[$level] $metadata $message"
 
   def init({__MODULE__, name}) do
     {:ok, configure(name, [])}
@@ -73,7 +73,8 @@ defmodule LoggerSyslogBackend do
     buffer = Keyword.get(opts, :buffer)
 
     path =
-      Keyword.get_lazy(opts, :path, fn -> default_path() end) |> IO.iodata_to_binary()
+      Keyword.get_lazy(opts, :path, fn -> default_path() end)
+      |> IO.iodata_to_binary()
       |> String.to_charlist()
 
     %{
@@ -116,7 +117,7 @@ defmodule LoggerSyslogBackend do
     app_id = app_id || Application.get_application(md[:module] || :elixir)
 
     pre =
-      :io_lib.format('<~B>~s ~s ~p: ', [
+      :io_lib.format(~c"<~B>~s ~s ~p: ", [
         facility ||| severity(level),
         timestamp(ts),
         app_id,
